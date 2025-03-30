@@ -86,6 +86,7 @@ enum OPCODES_PREFIX_1D /* with 0x1D prefix */
 {
         INST_INC,
         INST_DEC,
+        INST_TEST,
 };
 
 inline byte construct(byte opcode, byte dst)
@@ -96,11 +97,11 @@ inline byte construct(byte opcode, byte dst)
 int x = 0;
 int y = 0;
 
-#define LCD_CS A3          // Chip Select goes to Analog 3
-#define LCD_CD A2          // Command/Data goes to Analog 2
-#define LCD_WR A1          // LCD Write goes to Analog 1
-#define LCD_RD A0          // LCD Read goes to Analog 0
-#define LCD_RESET A4       // Can alternately just connect to Arduino's reset pin
+#define LCD_CS A3    // Chip Select goes to Analog 3
+#define LCD_CD A2    // Command/Data goes to Analog 2
+#define LCD_WR A1    // LCD Write goes to Analog 1
+#define LCD_RD A0    // LCD Read goes to Analog 0
+#define LCD_RESET A4 // Can alternately just connect to Arduino's reset pin
 
 // When using the BREAKOUT BOARD only, use these 8 data lines to the LCD:
 // For the Arduino Uno, Duemilanove, Diecimila, etc.:
@@ -417,14 +418,45 @@ void execute(byte *memory)
                         {
                                 y = regs;
                         }
-                        else if (regs[7] == 3)
+                        else if (regs[7] == 3 && (char)*arg_reg)
                         {
-                                tft.setCursor(x, y);
-                                tft.print((char)*arg_reg);
-                                x+=16;
-                                if (x >= 240)
+                                if (*arg_reg == 13 || *arg_reg == 10)
                                 {
-                                        x = 0; y+=16;
+                                        x = 0;
+                                        y += 24;
+                                }
+                                else if (*arg_reg == 8) // Backspace
+                                {
+                                        x -= 16;
+                                        if (x < 0)
+                                        {
+                                                if (y > 0)
+                                                {
+                                                        y -= 24;
+                                                        x = tft.width() - 16; // Move to end of previous line
+                                                }
+                                                else
+                                                {
+                                                        x = 0; // Can't go above top-left
+                                                }
+                                        }
+                                        // Clear the character position
+                                        tft.fillRect(x, y, 16, 24, BLACK);
+                                }
+                                else if (*arg_reg >= 32) // Printable characters only
+                                {
+                                        tft.setCursor(x, y);
+                                        tft.print((char)*arg_reg);
+                                        x += 16;
+                                }
+                                if (x >= tft.width())
+                                {
+                                        x = 0;
+                                        y += 24;
+                                        if (y >= tft.height())
+                                        {
+                                                y = 0;
+                                        }
                                 }
                         }
                         break;
@@ -490,6 +522,11 @@ void execute(byte *memory)
                         regs[0] = res;
                         ZE = regs[0] == 0;
                         *arg_reg = res;
+                        break;
+                }
+                case INST_TEST:
+                {
+                        ZE = (regs[0] & *arg_reg) == 0;
                         break;
                 }
                 }
@@ -600,10 +637,10 @@ void interruptHandler7()
 }
 
 ///*tft.fillScreen(BLACK);*/
-//tft.setCursor(0, 0);
-//tft.setTextColor(RED);
-//tft.setTextSize(1);
-//tft.println("Hello World!");
+// tft.setCursor(0, 0);
+// tft.setTextColor(RED);
+// tft.setTextSize(1);
+// tft.println("Hello World!");
 
 void setup()
 {
@@ -617,13 +654,20 @@ void setup()
         /*ADD B*/
 
         MEM = memory;
-        memory[0] = construct(INST_LDI, 0);
-        memory[1] = 65;
-        memory[2] = construct(INST_LDI, 7);
-        memory[3] = 3;
-        memory[4] = construct(PREFIX_1C, 0);
-        memory[5] = construct(INST_OUT_R, 0);
-        memory[6] = construct(INST_HLT, 0);
+        memory[0] = construct(INST_LDI, 7);
+        memory[1] = 3; /* tty */
+        memory[2] = construct(PREFIX_1C, 0);
+        memory[3] = construct(INST_INP_R, 0);
+        memory[4] = construct(PREFIX_1D, 0);
+        memory[5] = construct(INST_TEST, 0);
+        memory[6] = construct(INST_JZ, 0);
+        memory[7] = 0;
+        memory[8] = 2;
+        memory[9] = construct(PREFIX_1C, 0);
+        memory[10] = construct(INST_OUT_R, 0);
+        memory[11] = construct(INST_JMP, 0);
+        memory[12] = 0;
+        memory[13] = 2;
 }
 
 void loop()
@@ -633,5 +677,5 @@ void loop()
                 execute(memory);
         }
 
-        delay(100);
+        delay(1);
 }
