@@ -643,32 +643,36 @@ void interruptHandler7()
 // tft.setTextSize(1);
 // tft.println("Hello World!");
 
+#define MAGIC 0x7F
+
 void setup()
 {
         Serial.begin(9600);
+        MEM = memory;
+        while (Serial.available() <= 0); /* wait for connection */
+        byte start = 0;
+        ushort size = 0;
+        while (start != MAGIC) /* wait for magic */
+        {
+                if (Serial.available() > 0)
+                {
+                        start = Serial.read();
+                }
+        }
+
+        while (Serial.available() <= 0); /* wait for size */
+        size = Serial.read() % MEM_SIZE;
+
+        for (int i = 0; i < size; ++i)
+        {
+                while (Serial.available() <= 0); /* wait for byte */
+                memory[i] = Serial.read();
+        }
+
         setup_lcd();
         tft.fillScreen(BLACK);
         tft.setTextSize(2);
         tft.setTextColor(WHITE);
-        /*LDI A,1*/
-        /*LDI B,3*/
-        /*ADD B*/
-
-        MEM = memory;
-        memory[0] = construct(INST_LDI, 7);
-        memory[1] = 3; /* tty */
-        memory[2] = construct(PREFIX_1C, 0);
-        memory[3] = construct(INST_INP_R, 0);
-        memory[4] = construct(PREFIX_1D, 0);
-        memory[5] = construct(INST_TEST, 0);
-        memory[6] = construct(INST_JZ, 0);
-        memory[7] = 0;
-        memory[8] = 2;
-        memory[9] = construct(PREFIX_1C, 0);
-        memory[10] = construct(INST_OUT_R, 0);
-        memory[11] = construct(INST_JMP, 0);
-        memory[12] = 0;
-        memory[13] = 2;
 }
 
 void loop()
