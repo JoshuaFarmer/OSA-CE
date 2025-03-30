@@ -3,4 +3,4 @@ INP A
 TEST A
 JZ 2
 OUT A
-HLT
+JMP 0
