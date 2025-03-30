@@ -418,6 +418,12 @@ void execute(byte *memory)
                         {
                                 y = regs;
                         }
+                        else if (regs[7] == 4)
+                        {
+                                tft.fillScreen(BLACK);
+                                y = 0;
+                                x = 0;
+                        }
                         else if (regs[7] == 3 && (char)*arg_reg)
                         {
                                 if (*arg_reg == 13 || *arg_reg == 10)
