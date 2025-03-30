@@ -1,0 +1,7 @@
+loop:
+LDI Z 3
+INP A
+TEST A
+JZ 0
+OUT A
+HLT
