@@ -7,43 +7,45 @@
 typedef unsigned char byte;
 typedef unsigned short ushort;
 
-byte regs[4];
+byte regs[8]; /*A,B,C,D,E,F,W,Z*/
 ushort pc = 0;
 ushort sp = MEM_SIZE - 1;
 bool CY = 0, ZE = 0, HALTED = 0;
 
-/* no need for NOP instruction as its just e.g. MOV B,B*/
+/* no need for NOP instruction as its just e.g. LD B,B*/
 enum
 {
-        INST_LDI,    /*R=imm*/
-        INST_MOVA,   /*R=A*/
-        INST_MOVB,   /*R=B*/
-        INST_MOVC,   /*R=C*/
-        INST_MOVD,   /*R=D*/
-        INST_MOVSPH, /*R=SP(H)*/
-        INST_MOVSPL, /*R=SP(L)*/
-        INST_LDR,    /*R=ram[imm]*/
-        INST_STR,    /*ram[imm]=R*/
-        INST_ADD,    /*A+=R*/
-        INST_SUB,    /*A-=R*/
-        INST_ADC,    /*A+=R*/
-        INST_SBB,    /*A-=R+CY*/
-        INST_AND,    /*A&=R*/
-        INST_OR,     /*A|=R*/
-        INST_XOR,    /*A^=R*/
-        INST_ROL,    /*R=ROL(R)*/
-        INST_ROR,    /*R=ROR(R)*/
-        INST_LDR_C,  /*R=ram[C_D]*/
-        INST_STR_C,  /*ram[C_D]=R*/
-        INST_JMP,    /*PC=imm*/
-        INST_JC,     /*(CY) ? PC=imm : .*/
-        INST_JZ,     /*(ZE) ? PC=imm : .*/
-        INST_JNC,    /*(!CY) ? PC=imm : .*/
-        INST_JNZ,    /*(!ZE) ? PC=imm : .*/
+        INST_LDI,   /*R=imm*/
+        INST_LDA,   /*R=A*/
+        INST_LDB,   /*R=B*/
+        INST_LDC,   /*R=C*/
+        INST_LDD,   /*R=D*/
+        INST_LDSPH, /*R=SP(H)*/
+        INST_LDSPL, /*R=SP(L)*/
+        INST_LDR,   /*R=ram[imm]*/
+        INST_STR,   /*ram[imm]=R*/
+        INST_ADD,   /*A+=R*/
+        INST_SUB,   /*A-=R*/
+        INST_ADC,   /*A+=R*/
+        INST_SBB,   /*A-=R+CY*/
+        INST_AND,   /*A&=R*/
+        INST_OR,    /*A|=R*/
+        INST_XOR,   /*A^=R*/
+        INST_ROL,   /*R=ROL(R)*/
+        INST_ROR,   /*R=ROR(R)*/
+        INST_LDR_C, /*R=ram[C_D]*/
+        INST_STR_C, /*ram[C_D]=R*/
+        INST_JMP,   /*PC=imm*/
+        INST_JC,    /*(CY) ? PC=imm : .*/
+        INST_JZ,    /*(ZE) ? PC=imm : .*/
+        INST_JNC,   /*(!CY) ? PC=imm : .*/
+        INST_JNZ,   /*(!ZE) ? PC=imm : .*/
         INST_PUSH_R,
         INST_POP_R,
         INST_SPCD, /*SP=CD*/
+        INST_SPAB, /*SP=AB*/
         INST_PCCD, /*PC=CD*/
+        INST_PCAB, /*PC=AB*/
         INST_HLT,
 };
 
@@ -58,48 +60,49 @@ void execute(byte *memory)
         byte opcode = inst & 31;
         byte short_arg = inst >> 5; /* 3 bit argument */
         ushort cd = (regs[2] << 8) | regs[3];
+        ushort ab = (regs[0] << 8) | regs[1];
         byte *deref_cd = &memory[cd];
         byte imm8 = memory[pc & (MEM_SIZE - 1)];
         ushort imm16 = (imm8 << 8) | memory[(pc + 1) & (MEM_SIZE - 1)];
-        byte *dst = &regs[short_arg & 3];
+        byte *arg_reg = &regs[short_arg];
         switch (opcode)
         {
         case INST_HLT:
                 HALTED = true;
                 break;
         case INST_LDI:
-                *dst = imm8;
+                *arg_reg = imm8;
                 CONSUME_IMMEDIATE_8();
                 break;
-        case INST_MOVA:
-                *dst = regs[0];
+        case INST_LDA:
+                *arg_reg = regs[0];
                 break;
-        case INST_MOVB:
-                *dst = regs[1];
+        case INST_LDB:
+                *arg_reg = regs[1];
                 break;
-        case INST_MOVC:
-                *dst = regs[2];
+        case INST_LDC:
+                *arg_reg = regs[2];
                 break;
-        case INST_MOVD:
-                *dst = regs[3];
+        case INST_LDD:
+                *arg_reg = regs[3];
                 break;
-        case INST_MOVSPH:
-                *dst = sp >> 8;
+        case INST_LDSPH:
+                *arg_reg = sp >> 8;
                 break;
-        case INST_MOVSPL:
-                *dst = sp & 0xFF;
+        case INST_LDSPL:
+                *arg_reg = sp & 0xFF;
                 break;
         case INST_LDR:
-                *dst = memory[imm16 & (MEM_SIZE - 1)];
+                *arg_reg = memory[imm16 & (MEM_SIZE - 1)];
                 CONSUME_IMMEDIATE_16();
                 break;
         case INST_STR:
-                memory[imm16 & (MEM_SIZE - 1)] = *dst;
+                memory[imm16 & (MEM_SIZE - 1)] = *arg_reg;
                 CONSUME_IMMEDIATE_16();
                 break;
         case INST_ADD:
         {
-                ushort res = regs[0] + *dst;
+                ushort res = regs[0] + *arg_reg;
                 CY = res > 0xFF;
                 regs[0] = res;
                 ZE = regs[0] == 0;
@@ -107,7 +110,7 @@ void execute(byte *memory)
         }
         case INST_SUB:
         {
-                ushort res = regs[0] - *dst;
+                ushort res = regs[0] - *arg_reg;
                 CY = res > 0xFF; // Borrow
                 regs[0] = res;
                 ZE = regs[0] == 0;
@@ -115,7 +118,7 @@ void execute(byte *memory)
         }
         case INST_ADC:
         {
-                ushort res = regs[0] + *dst + CY;
+                ushort res = regs[0] + *arg_reg + CY;
                 CY = res > 0xFF;
                 regs[0] = res;
                 ZE = regs[0] == 0;
@@ -123,45 +126,45 @@ void execute(byte *memory)
         }
         case INST_SBB:
         {
-                ushort res = regs[0] - *dst - CY;
+                ushort res = regs[0] - *arg_reg - CY;
                 CY = res > 0xFF;
                 regs[0] = res;
                 ZE = regs[0] == 0;
                 break;
         }
         case INST_AND:
-                regs[0] &= *dst;
+                regs[0] &= *arg_reg;
                 ZE = regs[0] == 0;
                 break;
         case INST_OR:
-                regs[0] |= *dst;
+                regs[0] |= *arg_reg;
                 ZE = regs[0] == 0;
                 break;
         case INST_XOR:
-                regs[0] ^= *dst;
+                regs[0] ^= *arg_reg;
                 ZE = regs[0] == 0;
                 break;
         case INST_ROL:
         {
-                bool new_carry = (*dst >> 7);
-                *dst = (*dst << 1) | CY;
+                bool new_carry = (*arg_reg >> 7);
+                *arg_reg = (*arg_reg << 1) | CY;
                 CY = new_carry;
-                ZE = *dst == 0;
+                ZE = *arg_reg == 0;
                 break;
         }
         case INST_ROR:
         {
-                bool new_carry = *dst & 1;
-                *dst = (*dst >> 1) | (CY << 7);
+                bool new_carry = *arg_reg & 1;
+                *arg_reg = (*arg_reg >> 1) | (CY << 7);
                 CY = new_carry;
-                ZE = *dst == 0;
+                ZE = *arg_reg == 0;
                 break;
         }
         case INST_LDR_C:
-                *dst = memory[cd];
+                *arg_reg = memory[cd];
                 break;
         case INST_STR_C:
-                memory[cd] = *dst;
+                memory[cd] = *arg_reg;
                 break;
         case INST_JMP:
                 pc = imm16 & (MEM_SIZE - 1);
@@ -194,11 +197,11 @@ void execute(byte *memory)
                 break;
 
         case INST_PUSH_R:
-                memory[sp--] = *dst;
+                memory[sp--] = *arg_reg;
                 break;
 
         case INST_POP_R:
-                *dst = memory[++sp];
+                *arg_reg = memory[++sp];
                 break;
 
         case INST_SPCD:
@@ -207,6 +210,14 @@ void execute(byte *memory)
 
         case INST_PCCD:
                 pc = cd;
+                break;
+
+        case INST_SPAB:
+                sp = ab;
+                break;
+
+        case INST_PCAB:
+                pc = ab;
                 break;
 
         default:
@@ -243,6 +254,14 @@ void setup()
         Serial.println(regs[2], HEX);
         Serial.print("D=");
         Serial.println(regs[3], HEX);
+        Serial.print("E=");
+        Serial.println(regs[4], HEX);
+        Serial.print("F=");
+        Serial.println(regs[5], HEX);
+        Serial.print("W=");
+        Serial.println(regs[6], HEX);
+        Serial.print("Z=");
+        Serial.println(regs[7], HEX);
         Serial.print("PC=");
         Serial.println(pc, HEX);
         Serial.print("SP=");
