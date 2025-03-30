@@ -453,11 +453,11 @@ void execute(byte *memory)
                                 {
                                         x = 0;
                                         y += 24;
-                                        if (y >= tft.height())
-                                        {
-                                                y = 0;
-                                                tft.fillScreen(BLACK);
-                                        }
+                                }
+                                if (y >= tft.height())
+                                {
+                                        y = 0;
+                                        tft.fillScreen(BLACK);
                                 }
                         }
                         break;
