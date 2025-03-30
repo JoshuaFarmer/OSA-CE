@@ -17,6 +17,7 @@ byte interrupts_mask;
 byte interrupt_vector = 0;
 
 byte *MEM=NULL;
+byte memory[MEM_SIZE];
 
 /* no need for NOP instruction as its just e.g. LD B,B*/
 enum NO_EXT /* no prefix */
@@ -108,6 +109,8 @@ void execute(byte *memory)
         {
         case INST_HLT:
                 HALTED = true;
+                Serial.println("Emulator Halted");
+                dump_registers();
                 break;
         case INST_LDI:
                 *arg_reg = imm8;
@@ -434,7 +437,6 @@ void setup()
         attachInterrupt(digitalPinToInterrupt(INT_PINS[6]), interruptHandler6, FALLING);
         attachInterrupt(digitalPinToInterrupt(INT_PINS[7]), interruptHandler7, FALLING);
 
-        byte memory[MEM_SIZE];
         MEM=memory;
         memory[0] = construct(INST_LDI, 0);
         memory[1] = 1;
@@ -442,15 +444,12 @@ void setup()
         memory[3] = 3;
         memory[4] = construct(INST_ADD, 1);
         memory[5] = construct(INST_HLT, 0);
-        while (!HALTED)
-        {
-                execute(memory);
-        }
-
-        Serial.println("Emulator Halted");
-        dump_registers();
 }
 
 void loop()
 {
+        if (!HALTED)
+        {
+                execute(memory);
+        }
 }
