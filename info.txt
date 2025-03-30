@@ -1,0 +1,1 @@
+OSA/CE is osa86 for compact devices
