@@ -660,8 +660,11 @@ void setup()
                 }
         }
 
-        while (Serial.available() <= 0); /* wait for size */
-        size = Serial.read() % MEM_SIZE;
+        while (Serial.available() <= 0); /* wait for size (H) */
+        size  = Serial.read() << 8;
+        while (Serial.available() <= 0); /* wait for size (L) */
+        size |= Serial.read();
+        size %= MEM_SIZE;
 
         for (int i = 0; i < size; ++i)
         {

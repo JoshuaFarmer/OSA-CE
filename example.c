@@ -82,7 +82,8 @@ int main()
         byte example[] =
         {
                 0x7F, /* magic */
-                0xE, /* size */
+                0x0, /* size (H) */
+                0xE, /* size (L) */
                 construct(INST_LDI, 7),
                 3,
                 construct(PREFIX_1C, 0),
