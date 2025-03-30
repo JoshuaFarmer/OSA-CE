@@ -456,6 +456,7 @@ void execute(byte *memory)
                                         if (y >= tft.height())
                                         {
                                                 y = 0;
+                                                tft.fillScreen(BLACK);
                                         }
                                 }
                         }
@@ -676,6 +677,5 @@ void loop()
         {
                 execute(memory);
         }
-
         delay(1);
 }
