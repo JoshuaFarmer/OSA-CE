@@ -649,26 +649,48 @@ void setup()
 {
         Serial.begin(9600);
         MEM = memory;
-        while (Serial.available() <= 0); /* wait for connection */
-        byte start = 0;
-        ushort size = 0;
-        while (start != MAGIC) /* wait for magic */
+
+        // Clear memory and registers
+        memset(memory, 0, MEM_SIZE);
+        memset(regs, 0, sizeof(regs));
+        pc = 0;
+        sp = MEM_SIZE - 1;
+        CY = 0;
+        ZE = 0;
+        HALTED = 0;
+        interrupts_mask = 0;
+
+        // Wait for magic byte
+        while (true)
         {
                 if (Serial.available() > 0)
                 {
-                        start = Serial.read();
+                        byte start = Serial.read();
+                        if (start == MAGIC)
+                        {
+                                break;
+                        }
                 }
         }
 
-        while (Serial.available() <= 0); /* wait for size (H) */
-        size  = Serial.read() << 8;
-        while (Serial.available() <= 0); /* wait for size (L) */
+        // Read size (16-bit, big-endian)
+        ushort size = 0;
+        while (Serial.available() < 2)
+                ; // Wait for both bytes of size
+        size = Serial.read() << 8;
         size |= Serial.read();
-        size %= MEM_SIZE;
 
+        // Limit size to available memory
+        if (size > MEM_SIZE)
+        {
+                size = MEM_SIZE;
+        }
+
+        // Read program data
         for (int i = 0; i < size; ++i)
         {
-                while (Serial.available() <= 0); /* wait for byte */
+                while (Serial.available() <= 0)
+                        ; // Wait for each byte
                 memory[i] = Serial.read();
         }
 
@@ -676,6 +698,10 @@ void setup()
         tft.fillScreen(BLACK);
         tft.setTextSize(2);
         tft.setTextColor(WHITE);
+
+        Serial.println("Program loaded successfully");
+        Serial.print("Size: ");
+        Serial.println(size);
 }
 
 void loop()

@@ -32,10 +32,10 @@ enum NO_EXT /* no prefix */
         INST_JNZ,   /*(!ZE) ? PC=imm : .*/
         INST_PUSH_R,
         INST_POP_R,
+        PREFIX_1B,
         PREFIX_1C,
         PREFIX_1D,
         PREFIX_1E,
-        PREFIX_1F,
         INST_HLT,
 };
 

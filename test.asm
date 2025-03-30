@@ -1,7 +1,6 @@
-loop:
 LDI Z 3
 INP A
 TEST A
-JZ 0
+JZ 2
 OUT A
 HLT

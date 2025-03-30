@@ -329,7 +329,7 @@ def main():
             print(f"{byte:02X}",end="")
         print("")
         x = open("output.bin","wb")
-        x.write(bytearray([MAGIC,len(machine_code) >> 8,len(machine_code) & 255]+machine_code))
+        x.write(bytearray([MAGIC,len(machine_code) >> 8,(len(machine_code) & 255)]+machine_code+[0x00,0x00]))
         x.close()
     except ValueError as e:
         print(f"Assembly error: {e}")
