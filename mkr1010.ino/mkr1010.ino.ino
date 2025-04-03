@@ -1,9 +1,19 @@
+/*
+SD card attached to SPI bus as follows:
+MOSI - pin 11
+MISO - pin 12
+CLK - pin 13
+CS - pin 4
+*/
+
 /* simple emulator for programs */
 #include <Elegoo_GFX.h>    // Core graphics library
 #include <Elegoo_TFTLCD.h> // Hardware-specific library
+#include <SPI.h>
+#include <SD.h>
 
-#define MEM_ADDR(addr) ((addr) & (MEM_SIZE - 1))
-#define MEM_SIZE 512
+#define MEM_ADDR(addr) ((addr) & (MEM_BUFF_SIZE - 1))
+#define MEM_BUFF_SIZE 256
 #define CONSUME_IMMEDIATE_8() pc += 1;
 #define CONSUME_IMMEDIATE_16() pc += 2;
 
@@ -12,14 +22,15 @@ typedef unsigned short ushort;
 
 byte regs[8]; /*A,B,C,D,E,F,W,Z*/
 ushort pc = 0;
-ushort sp = MEM_SIZE - 1;
+ushort sp = MEM_BUFF_SIZE - 1;
 bool CY = 0, ZE = 0, HALTED = 0;
-const byte INT_PINS[] = {2, 3, 4, 5, 6, 7, 8, 9};
 byte interrupts_mask;
 byte interrupt_vector = 0;
 
 byte *MEM = NULL;
-byte memory[MEM_SIZE];
+byte memory[MEM_BUFF_SIZE];
+
+File myFile;
 
 /* no need for NOP instruction as its just e.g. LD B,B*/
 enum NO_EXT /* no prefix */
@@ -197,7 +208,7 @@ void execute(byte *memory)
         byte *deref_cd = &memory[cd];
         byte imm8 = memory[MEM_ADDR(pc)];
         ushort imm16 = (imm8 << 8) | memory[MEM_ADDR(pc + 1)];
-        ushort extimm16 = (memory[MEM_ADDR(pc + 1)] << 8) | memory[MEM_ADDR(pc + 2) & (MEM_SIZE - 1)];
+        ushort extimm16 = (memory[MEM_ADDR(pc + 1)] << 8) | memory[MEM_ADDR(pc + 2) & (MEM_BUFF_SIZE - 1)];
         byte *arg_reg = &regs[short_arg];
         switch (opcode)
         {
@@ -545,7 +556,7 @@ void execute(byte *memory)
                 Serial.println(opcode, HEX);
         }
 
-        pc = pc & (MEM_SIZE - 1);
+        pc = pc & (MEM_BUFF_SIZE - 1);
 }
 
 void dump_registers()
@@ -651,21 +662,8 @@ void interruptHandler7()
 
 #define MAGIC 0x7F
 
-void setup()
+void get_program_via_serial()
 {
-        Serial.begin(9600);
-        MEM = memory;
-
-        // Clear memory and registers
-        memset(memory, 0, MEM_SIZE);
-        memset(regs, 0, sizeof(regs));
-        pc = 0;
-        sp = MEM_SIZE - 1;
-        CY = 0;
-        ZE = 0;
-        HALTED = 0;
-        interrupts_mask = 0;
-
         // Wait for magic byte
         while (true)
         {
@@ -687,9 +685,9 @@ void setup()
         size |= Serial.read();
 
         // Limit size to available memory
-        if (size > MEM_SIZE)
+        if (size > MEM_BUFF_SIZE)
         {
-                size = MEM_SIZE;
+                size = MEM_BUFF_SIZE;
         }
 
         // Read program data
@@ -700,14 +698,55 @@ void setup()
                 memory[i] = Serial.read();
         }
 
+        Serial.println("Program loaded successfully");
+        Serial.print("Size: ");
+        Serial.println(size);
+}
+
+void setup()
+{
+        Serial.begin(9600);
+        pinMode(10, OUTPUT);
+        if (!SD.begin(10))
+        {
+                Serial.println("initialization failed!");
+                while (1)
+                {
+                }
+        }
+        MEM = memory;
+
+        // Clear memory and registers
+        memset(memory, 0, MEM_BUFF_SIZE);
+        memset(regs, 0, sizeof(regs));
+        pc = 0;
+        sp = MEM_BUFF_SIZE - 1;
+        CY = 0;
+        ZE = 0;
+        HALTED = 0;
+        interrupts_mask = 0;
+
+        if (!SD.exists("KRNL.CX"))
+        {
+                get_program_via_serial();
+        }
+        else
+        {
+                myFile = SD.open("KRNL.CX", FILE_READ);
+                byte magic;
+                ushort size;
+                ushort origin;
+                myFile.read(&magic,1);
+                myFile.read(&size,2);
+                myFile.read(&origin,2);
+                myFile.read(&memory[origin],MEM_BUFF_SIZE);
+                myFile.close();
+        }
+
         setup_lcd();
         tft.fillScreen(BLACK);
         tft.setTextSize(2);
         tft.setTextColor(WHITE);
-
-        Serial.println("Program loaded successfully");
-        Serial.print("Size: ");
-        Serial.println(size);
 }
 
 void loop()
