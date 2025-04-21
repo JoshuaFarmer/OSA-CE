@@ -1,338 +1,157 @@
-import sys
-from collections import defaultdict
+from sys import argv
 
-# Register mapping
-REGISTERS = {
-    'A': 0, 'B': 1, 'C': 2, 'D': 3,
-    'E': 4, 'F': 5, 'W': 6, 'Z': 7
+# Instruction to opcode mapping
+opcodes = {
+    'TAA': 0x00,
+    'TAS': 0x01,
+    'TAH': 0x02,
+    'TAL': 0x03,
+    'TSA': 0x40,
+    'TSS': 0x41,
+    'TSH': 0x42,
+    'TSL': 0x43,
+    'THA': 0x80,
+    'THS': 0x81,
+    'THH': 0x82,
+    'THL': 0x83,
+    'TLA': 0xC0,
+    'TLS': 0xC1,
+    'TLH': 0xC2,
+    'TLL': 0xC3,
+    'LIA': 0x04,
+    'LIS': 0x05,
+    'LIL': 0x06,
+    'ADI': 0x07,
+    'SUI': 0x08,
+    'ANI': 0x09,
+    'ORI': 0x0A,
+    'XRI': 0x0B,
+    'ADD': 0x0C,
+    'SUB': 0x0D,
+    'AND': 0x0E,
+    'ORA': 0x0F,
+    'XRA': 0x10,
+    'LDA': 0x11,
+    'STA': 0x12,
+    'LDH': 0x13,
+    'STH': 0x14,
+    'JMP': 0x15,
+    'JZ':  0x16,
+    'JC' : 0x56,
+    'JNZ': 0x96,
+    'JNC': 0xD6,
+    'INL': 0x17,
+    'DEL': 0x18,
+    'AHI': 0x19,
+    'AHD': 0x1A,
+    'NOP': 0x1B,
+    'CLC': 0x1C,
+    'SEC': 0x1D,
+    'OUT': 0x1E,
+    'IN':  0x1F,
+    'PHA': 0x20,
+    'PHH': 0x21,
+    'PHL': 0x22,
+    'PLA': 0x23,
+    'PLH': 0x24,
+    'PLL': 0x25,
+    'HLT': 0x26
 }
 
-MAGIC = 0x7F
+if len(argv) != 2:
+    exit(1)
 
-# Instruction opcodes
-OPCODES = {
-    # Base instructions
-    'HLT': 0x1F,
-    'LDI': 0x00,
-    'LDA': 0x01,
-    'LDB': 0x02,
-    'LDC': 0x03,
-    'LDD': 0x04,
-    'LDSPH': 0x05,
-    'LDSPL': 0x06,
-    'LDR': 0x07,
-    'STR': 0x08,
-    'ADD': 0x09,
-    'SUB': 0x0A,
-    'ADC': 0x0B,
-    'SBB': 0x0C,
-    'AND': 0x0D,
-    'OR': 0x0E,
-    'XOR': 0x0F,
-    'ROL': 0x10,
-    'ROR': 0x11,
-    'LDR_C': 0x12,
-    'STR_C': 0x13,
-    'JMP': 0x14,
-    'JC': 0x15,
-    'JZ': 0x16,
-    'JNC': 0x17,
-    'JNZ': 0x18,
-    'PUSH': 0x19,
-    'POP': 0x1A,
-    
-    # 0x1C prefix instructions
-    'LXI': (0x1C, 0x00),
-    'LXAB': (0x1C, 0x01),
-    'LXCD': (0x1C, 0x02),
-    'LXEF': (0x1C, 0x03),
-    'LXWZ': (0x1C, 0x04),
-    'SPCD': (0x1C, 0x05),
-    'SPAB': (0x1C, 0x06),
-    'SPEF': (0x1C, 0x07),
-    'SPWZ': (0x1C, 0x08),
-    'PCCD': (0x1C, 0x09),
-    'PCAB': (0x1C, 0x0A),
-    'PCEF': (0x1C, 0x0B),
-    'PCWZ': (0x1C, 0x0C),
-    'OUT': (0x1C, 0x0D),
-    'INP': (0x1C, 0x0E),
-    'GMASK': (0x1C, 0x0F),
-    'SMASK': (0x1C, 0x10),
-    'CALL': (0x1C, 0x11),
-    'IRET': (0x1C, 0x12),
-    'RET': (0x1C, 0x13),
-    
-    # 0x1D prefix instructions
-    'INC': (0x1D, 0x00),
-    'DEC': (0x1D, 0x01),
-    'TEST': (0x1D, 0x02),
-}
+with open(argv[1], "r") as x:
+    data = x.read()
 
-def construct(opcode, dst):
-    return (opcode & 31) | (dst << 5)
+# Process each line
+output = []
+labels = {}
+current_address = 0
 
-def parse_operand(op):
-    # Try to parse as register
-    if op.upper() in REGISTERS:
-        return ('reg', REGISTERS[op.upper()])
-    
-    # Try to parse as hex immediate
-    if op.startswith('0x'):
-        try:
-            return ('imm', int(op[2:], 16))
-        except ValueError:
-            pass
-    
-    # Try to parse as decimal immediate
-    try:
-        return ('imm', int(op))
-    except ValueError:
-        pass
-    
-    # Must be a label reference
-    return ('label', op)
-
-def assemble_line(line, labels, pc):
-    line = line.split(';')[0].strip()  # Remove comments
+# First pass: collect labels
+for line in data.split('\n'):
+    line = line.split(';')[0].strip()  # Remove comments and whitespace
     if not line:
-        return []
-    
-    parts = line.split()
-    mnemonic = parts[0].upper()
-    operands = [x.strip() for x in ','.join(parts[1:]).split(',')] if len(parts) > 1 else []
-    
-    # Handle label definition
-    if mnemonic.endswith(':'):
-        return []
-    
-    # Handle DB directive
-    if mnemonic == 'DB':
-        values = []
-        for op in operands:
-            if op.startswith('0x'):
-                values.append(int(op[2:], 16))
-            elif op.startswith("'") and op.endswith("'"):
-                values.append(ord(op[1:-1]))
-            else:
-                values.append(int(op))
-        return values
-    
-    # Handle DW directive
-    if mnemonic == 'DW':
-        values = []
-        for op in operands:
-            if op.startswith('0x'):
-                val = int(op[2:], 16)
-            else:
-                val = int(op)
-            values.append((val >> 8) & 0xFF)
-            values.append(val & 0xFF)
-        return values
-    
-    # Handle ORG directive
-    if mnemonic == 'ORG':
-        return []
-    
-    # Process regular instructions
-    opcode = OPCODES.get(mnemonic)
-    if opcode is None:
-        raise ValueError(f"Unknown instruction: {mnemonic}")
-    
-    output = []
-    
-    # Handle prefix instructions
-    if isinstance(opcode, tuple):
-        prefix, sub_opcode = opcode
+        continue
         
-        # Output the prefix instruction
-        if len(operands) > 0:
-            dst_reg = parse_operand(operands[0])
-            if dst_reg[0] != 'reg':
-                raise ValueError(f"Expected register for {mnemonic}, got {operands[0]}")
-            output.append(construct(prefix, dst_reg[1]))
-        else:
-            output.append(construct(prefix, 0))
-        
-        # Output the sub-opcode
-        output.append(sub_opcode)
-        
-        # Handle remaining operands
-        for op in operands[1:]:
-            operand = parse_operand(op)
-            if operand[0] == 'imm':
-                output.append(operand[1] & 0xFF)
-            elif operand[0] == 'label':
-                # We'll resolve labels in a second pass
-                output.append(('label', operand[1]))
-            else:
-                raise ValueError(f"Unexpected operand type {operand[0]} for {mnemonic}")
-        
-        # Special handling 16-bit immediate
-        if (mnemonic == 'LXI') and len(operands) > 1:
-            operand = parse_operand(operands[1])
-            if operand[0] == 'imm':
-                output.append((operand[1] >> 8) & 0xFF)
-                output.append(operand[1] & 0xFF)
-            elif operand[0] == 'label':
-                output.append(('label_hi', operand[1]))
-                output.append(('label_lo', operand[1]))
+    if ':' in line:
+        # This is a label definition
+        label = line.split(':')[0].strip()
+        labels[label] = current_address
     else:
-        # Handle regular instructions
-        if len(operands) > 0:
-            dst_reg = parse_operand(operands[0])
-            if dst_reg[0] == 'reg':
-                output.append(construct(opcode, dst_reg[1]))
-            elif dst_reg[0] == 'imm':
-                output.append(construct(opcode, 0))
-                if mnemonic == 'JMP' or mnemonic == 'JZ' or mnemonic == 'JC' or mnemonic == 'JNZ' or mnemonic == 'JNC' or mnemonic == 'CALL':
-                        output.append(dst_reg[1]>>8)
-                        output.append(dst_reg[1]&255)
-                else:
-                        output.append(dst_reg[1])
-        else:
-            output.append(construct(opcode, 0))
+        # This is an instruction
+        parts = line.split()
+        if parts:
+            current_address += 1
+            if parts[0] in ['LIA', 'LIS', 'LIL', 'ADI', 'SUI', 'ANI', 'ORI', 'XRI']:
+                current_address += 1
+            elif parts[0] in ['ADD', 'SUB', 'AND', 'ORA', 'XRA', 'LDA', 'STA', 'JMP', 'JZ', 'JC', 'JNZ', 'JNC']:
+                current_address += 2
+
+# Second pass: generate code
+current_address = 0
+for line in data.split('\n'):
+    line = line.split(';')[0].strip()  # Remove comments and whitespace
+    if not line or ':' in line:
+        continue  # Skip empty lines and label definitions (already processed)
         
-        # Handle remaining operands
-        for op in operands[1:]:
-            operand = parse_operand(op)
-            if operand[0] == 'imm':
-                output.append(operand[1] & 0xFF)
-            elif operand[0] == 'label':
-                # We'll resolve labels in a second pass
-                output.append(('label', operand[1]))
+    parts = line.split()
+    if not parts:
+        continue
+        
+    mnemonic = parts[0].upper()
+    operand = None
+    
+    if mnemonic in opcodes:
+        output.append(opcodes[mnemonic])
+        current_address += 1
+        
+        # short immediates
+        if mnemonic in ['LIA', 'LIS', 'LIL', 'ADI', 'SUI', 'ANI', 'ORI', 'XRI']:
+            if len(parts) < 2:
+                print(f"Error: Missing operand for {mnemonic} at line {current_address}")
+                exit(1)
+            try:
+                operand = int(parts[1], 0)  # Accepts hex (0x), binary (0b), or decimal
+                if operand < 0 or operand > 255:
+                    print(f"Error: Operand out of range (0-255) at line {current_address}")
+                    exit(1)
+                output.append(operand)
+                current_address += 1
+            except ValueError:
+                print(f"Error: Invalid operand for {mnemonic} at line {current_address}")
+                exit(1)
+        # wide immediates
+        elif mnemonic in ['JMP', 'JZ', 'JC', 'JNZ', 'JNC', 'ADD', 'SUB', 'AND', 'ORA', 'XRA', 'LDA', 'STA']:
+            if len(parts) < 2:
+                print(f"Error: Missing operand for {mnemonic} at line {current_address}")
+                exit(1)
+            operand = parts[1]
+            if operand in labels:
+                output.append(labels[operand] & 255)
+                output.append(labels[operand] >> 8)
+                current_address += 2
             else:
-                raise ValueError(f"Unexpected operand type {operand[0]} for {mnemonic}")
-    return output
+                try:
+                    operand = int(parts[1], 0)
+                    if operand < 0 or operand > 65535:
+                        print(f"Error: Address out of range (0-65535) at line {current_address}")
+                        exit(1)
+                    output.append(operand & 255)
+                    output.append(operand >> 8)
+                    current_address += 2
+                except ValueError:
+                    print(f"Error: Invalid address/label for {mnemonic} at line {current_address}")
+                    exit(1)
+    else:
+        print(f"Error: Unknown instruction {mnemonic} at line {current_address}")
+        exit(1)
 
-def assemble(source):
-    # First pass: collect labels
-    labels = {}
-    pc = 0
-    lines = source.split('\n')
-    
-    for line in lines:
-        line = line.split(';')[0].strip()  # Remove comments
-        if not line:
-            continue
-        
-        # Handle label definition
-        if ':' in line:
-            label = line.split(':')[0].strip()
-            labels[label] = pc
-            line = line.split(':')[1].strip()
-            if not line:
-                continue
-        
-        # Handle ORG directive
-        parts = line.split()
-        if parts and parts[0].upper() == 'ORG':
-            pc = int(parts[1], 0)
-            continue
-        
-        # Handle DB/DW directives
-        if parts and parts[0].upper() in ('DB', 'DW'):
-            if parts[0].upper() == 'DB':
-                pc += len(parts) - 1
-            else:  # DW
-                pc += (len(parts) - 1) * 2
-            continue
-        
-        # Count bytes for regular instructions
-        opcode = OPCODES.get(parts[0].upper()) if parts else None
-        if opcode is None:
-            continue
-        
-        if isinstance(opcode, tuple):
-            pc += 2  # Prefix + sub-opcode
-            if parts[0].upper() == 'LXI' and len(parts) > 2:
-                pc += 2  # 16-bit immediate
-            elif len(parts) > 1:
-                pc += len(parts) - 2  # Additional operands
-        else:
-            pc += 1  # Base instruction
-            if len(parts) > 1:
-                pc += len(parts) - 1  # Additional operands
-    
-    # Second pass: generate machine code
-    pc = 0
-    output = []
-    unresolved = []
-    
-    for line in lines:
-        line = line.split(';')[0].strip()  # Remove comments
-        if not line:
-            continue
-        
-        # Handle label definition
-        if ':' in line:
-            label = line.split(':')[0].strip()
-            line = line.split(':')[1].strip()
-            if not line:
-                continue
-        
-        # Handle ORG directive
-        parts = line.split()
-        if parts and parts[0].upper() == 'ORG':
-            new_pc = int(parts[1], 0)
-            if new_pc > len(output):
-                output += [0] * (new_pc - len(output))
-            pc = new_pc
-            continue
-        
-        # Generate machine code
-        bytes_to_add = assemble_line(line, labels, pc)
-        
-        # Replace label references
-        for i, byte in enumerate(bytes_to_add):
-            if isinstance(byte, tuple):
-                ref_type, label = byte
-                if label not in labels:
-                    raise ValueError(f"Undefined label: '{label}'")
-                
-                addr = labels[label]
-                if ref_type == 'label':
-                    bytes_to_add[i] = addr & 0xFF
-                elif ref_type == 'label_hi':
-                    bytes_to_add[i] = (addr >> 8) & 0xFF
-                elif ref_type == 'label_lo':
-                    bytes_to_add[i] = addr & 0xFF
-        
-        # Add to output
-        if pc < len(output):
-            # Overwrite existing bytes if ORG moved us back
-            for i, byte in enumerate(bytes_to_add):
-                output[pc + i] = byte
-        else:
-            output += bytes_to_add
-        pc += len(bytes_to_add)
-    
-    return output
-
-def main():
-    if len(sys.argv) != 2:
-        print("Usage: assembler.py <input.asm>")
-        return
-    
-    with open(sys.argv[1], 'r') as f:
-        source = f.read()
-    
-    try:
-        machine_code = assemble(source)
-        
-        # Output in hex format
-        print("Machine code:")
-        print(f"{MAGIC:02X}",end="")
-        print(f"{len(machine_code) >> 8:02X}",end="")
-        print(f"{len(machine_code) & 255:02X}",end="")
-        for i, byte in enumerate(machine_code):
-            print(f"{byte:02X}",end="")
-        print("")
-        x = open("output.bin","wb")
-        x.write(bytearray([MAGIC,len(machine_code) >> 8,(len(machine_code) & 255)]+machine_code+[0x00,0x00]))
-        x.close()
-    except ValueError as e:
-        print(f"Assembly error: {e}")
-
-if __name__ == "__main__":
-    main()
+# Print the output in hex format
+print("Generated machine code:")
+for i, byte in enumerate(output):
+    print(f"{i:03X}: {byte:02X}")
+with open("output.cx","wb") as f:
+        f.write(bytearray(output))
+        f.close()
