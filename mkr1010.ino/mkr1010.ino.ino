@@ -46,5 +46,4 @@ void loop()
         {
                 execute(memory);
         }
-        delay(1);
 }

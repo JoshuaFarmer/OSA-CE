@@ -84,7 +84,13 @@ for line in data.split('\n'):
         parts = line.split()
         if parts:
             current_address += 1
-            if parts[0] in ['LIA', 'LIS', 'LIL', 'ADI', 'SUI', 'ANI', 'ORI', 'XRI']:
+            if parts[0] in ['.BYTE']:
+                continue
+            elif parts[0] in ['.STR']:
+                string = ' '.join(parts[1:])
+                current_address += len(string[1:-1])-1
+                continue
+            elif parts[0] in ['LIA', 'LIS', 'LIL', 'ADI', 'SUI', 'ANI', 'ORI', 'XRI']:
                 current_address += 1
             elif parts[0] in ['ADD', 'SUB', 'AND', 'ORA', 'XRA', 'LDA', 'STA', 'JMP', 'JZ', 'JC', 'JNZ', 'JNC']:
                 current_address += 2
@@ -103,7 +109,26 @@ for line in data.split('\n'):
     mnemonic = parts[0].upper()
     operand = None
     
-    if mnemonic in opcodes:
+    if mnemonic in ['.BYTE']:
+        if len(parts) < 2:
+            print(f"Error: Missing operand for {mnemonic} at line {current_address}")
+            exit(1)
+        try:
+            operand = int(parts[1], 0)  # Accepts hex (0x), binary (0b), or decimal
+            if operand < 0 or operand > 255:
+                print(f"Error: Operand out of range (0-255) at line {current_address}")
+                exit(1)
+            output.append(operand)
+            current_address += 1
+        except ValueError:
+            print(f"Error: Invalid operand for {mnemonic} at line {current_address}")
+            exit(1)
+    elif mnemonic in ['.STR']:
+            string = ' '.join(parts[1:])
+            current_address += len(string[1:-1])
+            for i in string[1:-1]:
+                output.append(ord(i))
+    elif mnemonic in opcodes:
         output.append(opcodes[mnemonic])
         current_address += 1
         
@@ -112,16 +137,21 @@ for line in data.split('\n'):
             if len(parts) < 2:
                 print(f"Error: Missing operand for {mnemonic} at line {current_address}")
                 exit(1)
-            try:
-                operand = int(parts[1], 0)  # Accepts hex (0x), binary (0b), or decimal
-                if operand < 0 or operand > 255:
-                    print(f"Error: Operand out of range (0-255) at line {current_address}")
-                    exit(1)
-                output.append(operand)
+            operand = parts[1]
+            if operand in labels:
+                output.append(labels[operand] & 255)
                 current_address += 1
-            except ValueError:
-                print(f"Error: Invalid operand for {mnemonic} at line {current_address}")
-                exit(1)
+            else:
+                try:
+                    operand = int(parts[1], 0)  # Accepts hex (0x), binary (0b), or decimal
+                    if operand < 0 or operand > 255:
+                        print(f"Error: Operand out of range (0-255) at line {current_address}")
+                        exit(1)
+                    output.append(operand)
+                    current_address += 1
+                except ValueError:
+                    print(f"Error: Invalid operand for {mnemonic} at line {current_address}")
+                    exit(1)
         # wide immediates
         elif mnemonic in ['JMP', 'JZ', 'JC', 'JNZ', 'JNC', 'ADD', 'SUB', 'AND', 'ORA', 'XRA', 'LDA', 'STA']:
             if len(parts) < 2:

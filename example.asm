@@ -1,8 +1,13 @@
 INPUT:
-        IN
-        SUI 0
-        JZ INPUT
+        LIL msg
+        LIA 0
+        TAH
+mainloop:
+        LDH
         OUT
-        SUI 65
-        JNZ INPUT
+        INL
+        SUI 0
+        JNZ mainloop
         HLT
+msg:
+        .str "Hello, World!"
